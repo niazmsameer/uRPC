@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Net;
-using System.Threading;
 
 namespace uRPC
 {
@@ -10,11 +9,9 @@ namespace uRPC
     public class RpcServer
     {
         private readonly HttpListener _httpListener;
-        private readonly Thread _listenThread;
-        private bool _isRunning;
 
         /// <summary>
-        /// Invoked whenever the RPC server has a message that can be outputted to any logging system.
+        /// Invoked whenever the RPC server has a message that can be outputted to a logging system.
         /// </summary>
         public event Action<string, RpcLogSeverity> LogMessageDispatched;
         
@@ -23,34 +20,17 @@ namespace uRPC
         {
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add(uriPrefix);
-
-            _listenThread = new Thread(ListenThreadRoutine);
-
-            _isRunning = false;
         }
 
         /// <summary>
-        /// Starts the RPC server using threading internally.
+        /// Starts the RPC server.
         /// </summary>
         public void Start()
         {
-            _isRunning = true;
-
             _httpListener.Start();
-            _listenThread.Start();
-
+            _httpListener.BeginGetContext(OnContextAvailable, _httpListener);
+            
             Log("RPC server started.", RpcLogSeverity.Information);
-        }
-        
-        /// <summary>
-        /// Starts the RPC server using C# async internally.
-        /// </summary>
-        /// <exception cref="NotImplementedException"></exception>
-        public void StartAsync()
-        {
-            Log("Attempted to start the RpcServer using C# async which is not implemented yet.",
-                RpcLogSeverity.Error);
-            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -58,33 +38,26 @@ namespace uRPC
         /// </summary>
         public void Stop()
         {
-            _isRunning = false;
             _httpListener.Stop();
+            Log("RPC server stopped.", RpcLogSeverity.Information);
+        }
+
+        private void OnContextAvailable(IAsyncResult asyncResult)
+        {
+            var context = _httpListener.EndGetContext(asyncResult);
+            
+            // TODO: Implement middleware
+
+            context.Response.StatusCode = (int)HttpStatusCode.NotImplemented;
+            context.Response.Close();
+
+            // Wait for then process next context
+            _httpListener.BeginGetContext(OnContextAvailable, _httpListener);
         }
 
         private void Log(string message, RpcLogSeverity severity)
         {
             LogMessageDispatched?.Invoke(message, severity);
-        }
-
-        private void ListenThreadRoutine()
-        {
-            while (_isRunning)
-            {
-                try
-                {
-                    var context = _httpListener.GetContext(); // Thread blocking
-                    Log(context.Request.RawUrl, RpcLogSeverity.Information);
-                    context.Response.StatusCode = (int)HttpStatusCode.NotImplemented;
-                    context.Response.Close();
-                }
-                catch
-                {
-                    // ignored
-                }
-            }
-            
-            Log("RPC server listen thread exiting.", RpcLogSeverity.Information);
         }
     }
 }
